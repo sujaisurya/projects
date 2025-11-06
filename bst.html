@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BST Visualizer — Fixed Search & Traversals</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Comfortaa:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    font-family: "Poppins", sans-serif;
+    background-image: url('https://images.unsplash.com/photo-1503264116251-35a269479413?auto=format&fit=crop&w=1500&q=80');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: white;
+    text-align: center;
+  }
+  .overlay {
+    background: rgba(0,0,0,0.6);
+    min-height: 100vh;
+    padding: 18px;
+  }
+  h1 { margin: 18px 0; font-weight:600; color:#b6ffdd; text-shadow: 0 2px 6px rgba(0,0,0,0.6); }
+  #controls { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  input { padding:8px 12px; border-radius:8px; border:none; font-size:1rem; outline:none; }
+  button {
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 9px 14px;
+    border-radius: 10px;
+    cursor:pointer;
+    font-weight:600;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  button:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+  #tree { width:100%; height:58vh; margin: 6px auto; border-radius:14px; overflow:hidden; display:flex; justify-content:center; align-items:flex-start; }
+  #svgCanvas { width:100%; height:100%; background: rgba(255,255,255,0.04); border-radius:12px; }
+  #output { margin-top:12px; font-family: "Comfortaa", cursive; }
+  .node { fill: rgba(0,255,200,0.9); stroke: #ffffff; stroke-width:1.6; }
+  .link { stroke: rgba(255,255,255,0.9); stroke-width:1.6; }
+</style>
+</head>
+<body>
+  <div class="overlay">
+    <h1>🌲 Binary Search Tree Visualizer</h1>
+
+    <div id="controls">
+      <input id="value" type="number" placeholder="Value (for insert/delete/search)" />
+      <button id="btnInsert">Insert</button>
+      <button id="btnDelete">Delete</button>
+      <button id="btnSearch">Search</button>
+      <button id="btnIn">Inorder</button>
+      <button id="btnPre">Preorder</button>
+      <button id="btnPost">Postorder</button>
+
+      <input id="arrayInput" type="text" placeholder="Array (e.g. 7,3,9,1,5)" style="width:220px" />
+      <button id="btnGenerate">Generate</button>
+      <button id="btnClear">Clear</button>
+    </div>
+
+    <div id="tree">
+      <svg id="svgCanvas" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMin meet"></svg>
+    </div>
+
+    <div id="output">
+      <div id="status">Welcome — insert values or generate from array to begin.</div>
+      <div id="traversal" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+<script>
+/* ---------- BST Logic ---------- */
+class Node {
+  constructor(value) { this.value = value; this.left = null; this.right = null; }
+}
+
+let root = null;
+
+function insertNodeHelper(node, value) {
+  if (!node) return new Node(value);
+  if (value < node.value) node.left = insertNodeHelper(node.left, value);
+  else if (value > node.value) node.right = insertNodeHelper(node.right, value);
+  return node;
+}
+function insertValue(v) { root = insertNodeHelper(root, v); }
+
+function deleteNodeHelper(node, value) {
+  if (!node) return null;
+  if (value < node.value) node.left = deleteNodeHelper(node.left, value);
+  else if (value > node.value) node.right = deleteNodeHelper(node.right, value);
+  else {
+    if (!node.left) return node.right;
+    if (!node.right) return node.left;
+    let succ = node.right;
+    while (succ.left) succ = succ.left;
+    node.value = succ.value;
+    node.right = deleteNodeHelper(node.right, succ.value);
+  }
+  return node;
+}
+function deleteValue(v) { root = deleteNodeHelper(root, v); }
+
+function searchHelper(node, value) {
+  if (!node) return null;
+  if (node.value === value) return node;
+  return value < node.value ? searchHelper(node.left, value) : searchHelper(node.right, value);
+}
+function searchValue(v) { return searchHelper(root, v); }
+
+function inorder(node, arr=[]) {
+  if (!node) return arr;
+  inorder(node.left, arr); arr.push(node.value); inorder(node.right, arr);
+  return arr;
+}
+function preorder(node, arr=[]) {
+  if (!node) return arr;
+  arr.push(node.value); preorder(node.left, arr); preorder(node.right, arr);
+  return arr;
+}
+function postorder(node, arr=[]) {
+  if (!node) return arr;
+  postorder(node.left, arr); postorder(node.right, arr); arr.push(node.value);
+  return arr;
+}
+
+/* ---------- Visualization Helpers ---------- */
+const svg = document.getElementById('svgCanvas');
+const status = document.getElementById('status');
+const trav = document.getElementById('traversal');
+
+function clearSVG() {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+}
+
+function computeDepth(node) {
+  if (!node) return 0;
+  return 1 + Math.max(computeDepth(node.left), computeDepth(node.right));
+}
+
+/* stable small layout: fixed top margin and scale nodes horizontally by depth */
+function drawTree() {
+  clearSVG();
+  if (!root) {
+    status.textContent = 'Tree is empty.';
+    trav.textContent = '';
+    return;
+  }
+
+  const depth = computeDepth(root);
+  const width = 1100;    // viewBox width
+  const startX = width / 2;
+  const startY = 60;
+  const baseGap = Math.min(260, Math.max(60, 260 - depth * 8)); // reduce gap as depth grows but keep tree small
+
+  // recursive drawing using computed X positions using inorder index
+  // first compute inorder positions to get stable horizontal spacing
+  let index = 0;
+  const positions = new Map(); // node -> x
+
+  function assignPos(node, level = 0) {
+    if (!node) return;
+    assignPos(node.left, level + 1);
+    // x depends on inorder index scaled into width
+    const margin = 60;
+    const usableWidth = width - margin * 2;
+    const totalLeaves = Math.pow(2, Math.max(0, depth - 1)); // upper-bound leaves for spacing
+    // We map index to x: evenly across usableWidth
+    const x = margin + (index / Math.max(1, Math.pow(2, depth) - 1)) * usableWidth * 1.0 * Math.min(1, depth/8 + 0.5) + (index * 0); // subtle scaling
+    // Simpler approach: evenly distribute across usableWidth by incrementing index
+    // We'll set x using index and then increment index
+    positions.set(node, { xRaw: index });
+    index++;
+    assignPos(node.right, level + 1);
+  }
+
+  // Simpler: do inorder count then map index to x by dividing usable width by nodeCount
+  function countNodes(n) { if (!n) return 0; return 1 + countNodes(n.left) + countNodes(n.right); }
+  const nodeCount = countNodes(root);
+  const margin = 60;
+  const usableWidth = width - margin * 2;
+  let idx = 0;
+  function assignX(n) {
+    if (!n) return;
+    assignX(n.left);
+    const x = margin + (idx + 0.5) * (usableWidth / Math.max(1, nodeCount));
+    positions.set(n, { x: x });
+    idx++;
+    assignX(n.right);
+  }
+  assignX(root);
+
+  // Now draw lines & nodes using positions
+  function drawNode(n, level = 0, y = startY) {
+    if (!n) return;
+    const pos = positions.get(n);
+    const x = pos.x;
+    const gapY = 85;
+    if (n.left) {
+      const lx = positions.get(n.left).x;
+      const ly = y + gapY;
+      drawLine(x, y, lx, ly);
+      drawNode(n.left, level + 1, y + gapY);
+    }
+    if (n.right) {
+      const rx = positions.get(n.right).x;
+      const ry = y + gapY;
+      drawLine(x, y, rx, ry);
+      drawNode(n.right, level + 1, y + gapY);
+    }
+    drawCircle(x, y, n.value);
+  }
+  drawNode(root, 0, startY);
+
+  status.textContent = `Tree rendered — nodes: ${nodeCount}, depth: ${depth}`;
+}
+
+function drawLine(x1, y1, x2, y2) {
+  const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('x1', x1);
+  line.setAttribute('y1', y1 + 18);
+  line.setAttribute('x2', x2);
+  line.setAttribute('y2', y2 - 18);
+  line.setAttribute('class','link');
+  svg.appendChild(line);
+}
+function drawCircle(cx, cy, val) {
+  const r = 20;
+  const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circle.setAttribute('cx', cx);
+  circle.setAttribute('cy', cy);
+  circle.setAttribute('r', r);
+  circle.setAttribute('class','node');
+  svg.appendChild(circle);
+
+  const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  txt.setAttribute('x', cx);
+  txt.setAttribute('y', cy + 6);
+  txt.setAttribute('text-anchor', 'middle');
+  txt.setAttribute('font-size','14');
+  txt.setAttribute('fill','#000');
+  txt.textContent = val;
+  svg.appendChild(txt);
+}
+
+/* ---------- UI actions (validated) ---------- */
+const vInput = document.getElementById('value');
+const arrInput = document.getElementById('arrayInput');
+
+document.getElementById('btnInsert').addEventListener('click', () => {
+  const v = vInput.value;
+  if (v === "" || isNaN(Number(v))) {
+    alert('Please enter a valid number to insert.');
+    return;
+  }
+  insertValue(Number(v));
+  vInput.value = '';
+  drawTree();
+});
+document.getElementById('btnDelete').addEventListener('click', () => {
+  const v = vInput.value;
+  if (v === "" || isNaN(Number(v))) {
+    alert('Please enter a valid number to delete.');
+    return;
+  }
+  deleteValue(Number(v));
+  vInput.value = '';
+  drawTree();
+});
+document.getElementById('btnSearch').addEventListener('click', () => {
+  const v = vInput.value;
+  if (v === "" || isNaN(Number(v))) {
+    alert('Please enter a valid number to search.');
+    return;
+  }
+  const found = searchValue(Number(v));
+  if (found) {
+    status.textContent = `✅ Found ${v} in the tree.`;
+    // highlight found node: simple approach - re-render then highlight last matching text/circle
+    highlightNode(Number(v));
+  } else {
+    status.textContent = `❌ ${v} not found.`;
+    drawTree();
+  }
+  vInput.value = '';
+});
+document.getElementById('btnIn').addEventListener('click', () => {
+  if (!root) { status.textContent = 'Tree is empty.'; trav.textContent=''; return; }
+  trav.textContent = 'Inorder: ' + inorder(root).join(' → ');
+});
+document.getElementById('btnPre').addEventListener('click', () => {
+  if (!root) { status.textContent = 'Tree is empty.'; trav.textContent=''; return; }
+  trav.textContent = 'Preorder: ' + preorder(root).join(' → ');
+});
+document.getElementById('btnPost').addEventListener('click', () => {
+  if (!root) { status.textContent = 'Tree is empty.'; trav.textContent=''; return; }
+  trav.textContent = 'Postorder: ' + postorder(root).join(' → ');
+});
+
+document.getElementById('btnGenerate').addEventListener('click', () => {
+  const raw = arrInput.value.trim();
+  if (!raw) { alert('Enter array elements separated by commas or spaces.'); return; }
+  // accept commas and/or spaces
+  const parts = raw.split(/[, ]+/).map(s => s.trim()).filter(s => s.length);
+  const nums = parts.map(Number).filter(n => !isNaN(n));
+  if (!nums.length) { alert('No valid numbers found in input.'); return; }
+  // build tree from given array but insert in order; user earlier wanted sorted - use sorted array to build balanced-ish tree
+  nums.sort((a,b)=>a-b);
+  root = null;
+  nums.forEach(n => insertValue(n));
+  arrInput.value = '';
+  drawTree();
+});
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  root = null;
+  clearSVG();
+  status.textContent = 'Tree cleared.';
+  trav.textContent = '';
+  vInput.value = '';
+  arrInput.value = '';
+});
+
+/* ---------- Highlight found node (simple method) ---------- */
+function highlightNode(value) {
+  // Re-draw, then search svg elements for matching text, and add a glow circle around it
+  drawTree();
+  // find text elements in svg with matching content
+  const texts = svg.querySelectorAll('text');
+  for (const t of texts) {
+    if (t.textContent == String(value)) {
+      const cx = parseFloat(t.getAttribute('x'));
+      const cy = parseFloat(t.getAttribute('y')) - 6;
+      // create highlight ring
+      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx', cx);
+      ring.setAttribute('cy', cy);
+      ring.setAttribute('r', 26);
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', '#fffb6b');
+      ring.setAttribute('stroke-width', '3.5');
+      ring.setAttribute('opacity', '0.95');
+      svg.appendChild(ring);
+      // small animation: fade out after 1.2s
+      setTimeout(() => { ring.remove(); }, 1400);
+      break;
+    }
+  }
+}
+
+/* initial render (empty) */
+drawTree();
+
+</script>
+</body>
+</html>
