@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>BST Visualizer — Fixed Search & Traversals</title>
+<title>BST Visualizer — Two-Way Layout</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Comfortaa:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
   body {
@@ -73,7 +73,11 @@
 <script>
 /* ---------- BST Logic ---------- */
 class Node {
-  constructor(value) { this.value = value; this.left = null; this.right = null; }
+  constructor(value) {
+    this.value = value;
+    this.left = null;
+    this.right = null;
+  }
 }
 
 let root = null;
@@ -111,17 +115,23 @@ function searchValue(v) { return searchHelper(root, v); }
 
 function inorder(node, arr=[]) {
   if (!node) return arr;
-  inorder(node.left, arr); arr.push(node.value); inorder(node.right, arr);
+  inorder(node.left, arr);
+  arr.push(node.value);
+  inorder(node.right, arr);
   return arr;
 }
 function preorder(node, arr=[]) {
   if (!node) return arr;
-  arr.push(node.value); preorder(node.left, arr); preorder(node.right, arr);
+  arr.push(node.value);
+  preorder(node.left, arr);
+  preorder(node.right, arr);
   return arr;
 }
 function postorder(node, arr=[]) {
   if (!node) return arr;
-  postorder(node.left, arr); postorder(node.right, arr); arr.push(node.value);
+  postorder(node.left, arr);
+  postorder(node.right, arr);
+  arr.push(node.value);
   return arr;
 }
 
@@ -139,7 +149,7 @@ function computeDepth(node) {
   return 1 + Math.max(computeDepth(node.left), computeDepth(node.right));
 }
 
-/* stable small layout: fixed top margin and scale nodes horizontally by depth */
+/* ---------- NEW drawTree (Two-way Proper Layout) ---------- */
 function drawTree() {
   clearSVG();
   if (!root) {
@@ -149,73 +159,42 @@ function drawTree() {
   }
 
   const depth = computeDepth(root);
-  const width = 1100;    // viewBox width
+  const width = 1100;
+  const startY = 80;
+  const gapY = 90; // vertical gap between levels
   const startX = width / 2;
-  const startY = 60;
-  const baseGap = Math.min(260, Math.max(60, 260 - depth * 8)); // reduce gap as depth grows but keep tree small
 
-  // recursive drawing using computed X positions using inorder index
-  // first compute inorder positions to get stable horizontal spacing
-  let index = 0;
-  const positions = new Map(); // node -> x
-
-  function assignPos(node, level = 0) {
+  // Recursive function to draw nodes with proper left/right spreading
+  function drawNode(node, x, y, offset) {
     if (!node) return;
-    assignPos(node.left, level + 1);
-    // x depends on inorder index scaled into width
-    const margin = 60;
-    const usableWidth = width - margin * 2;
-    const totalLeaves = Math.pow(2, Math.max(0, depth - 1)); // upper-bound leaves for spacing
-    // We map index to x: evenly across usableWidth
-    const x = margin + (index / Math.max(1, Math.pow(2, depth) - 1)) * usableWidth * 1.0 * Math.min(1, depth/8 + 0.5) + (index * 0); // subtle scaling
-    // Simpler approach: evenly distribute across usableWidth by incrementing index
-    // We'll set x using index and then increment index
-    positions.set(node, { xRaw: index });
-    index++;
-    assignPos(node.right, level + 1);
-  }
 
-  // Simpler: do inorder count then map index to x by dividing usable width by nodeCount
-  function countNodes(n) { if (!n) return 0; return 1 + countNodes(n.left) + countNodes(n.right); }
-  const nodeCount = countNodes(root);
-  const margin = 60;
-  const usableWidth = width - margin * 2;
-  let idx = 0;
-  function assignX(n) {
-    if (!n) return;
-    assignX(n.left);
-    const x = margin + (idx + 0.5) * (usableWidth / Math.max(1, nodeCount));
-    positions.set(n, { x: x });
-    idx++;
-    assignX(n.right);
-  }
-  assignX(root);
-
-  // Now draw lines & nodes using positions
-  function drawNode(n, level = 0, y = startY) {
-    if (!n) return;
-    const pos = positions.get(n);
-    const x = pos.x;
-    const gapY = 85;
-    if (n.left) {
-      const lx = positions.get(n.left).x;
+    // Left subtree
+    if (node.left) {
+      const lx = x - offset;
       const ly = y + gapY;
       drawLine(x, y, lx, ly);
-      drawNode(n.left, level + 1, y + gapY);
+      drawNode(node.left, lx, ly, offset / 1.6);
     }
-    if (n.right) {
-      const rx = positions.get(n.right).x;
+
+    // Right subtree
+    if (node.right) {
+      const rx = x + offset;
       const ry = y + gapY;
       drawLine(x, y, rx, ry);
-      drawNode(n.right, level + 1, y + gapY);
+      drawNode(node.right, rx, ry, offset / 1.6);
     }
-    drawCircle(x, y, n.value);
-  }
-  drawNode(root, 0, startY);
 
-  status.textContent = `Tree rendered — nodes: ${nodeCount}, depth: ${depth}`;
+    // Draw node
+    drawCircle(x, y, node.value);
+  }
+
+  const initialOffset = 300; // horizontal spacing for top level
+  drawNode(root, startX, startY, initialOffset);
+
+  status.textContent = `Tree rendered — depth: ${depth}`;
 }
 
+/* Drawing shapes */
 function drawLine(x1, y1, x2, y2) {
   const line = document.createElementNS('http://www.w3.org/2000/svg','line');
   line.setAttribute('x1', x1);
@@ -244,7 +223,7 @@ function drawCircle(cx, cy, val) {
   svg.appendChild(txt);
 }
 
-/* ---------- UI actions (validated) ---------- */
+/* ---------- UI actions ---------- */
 const vInput = document.getElementById('value');
 const arrInput = document.getElementById('arrayInput');
 
@@ -277,7 +256,6 @@ document.getElementById('btnSearch').addEventListener('click', () => {
   const found = searchValue(Number(v));
   if (found) {
     status.textContent = `✅ Found ${v} in the tree.`;
-    // highlight found node: simple approach - re-render then highlight last matching text/circle
     highlightNode(Number(v));
   } else {
     status.textContent = `❌ ${v} not found.`;
@@ -301,12 +279,9 @@ document.getElementById('btnPost').addEventListener('click', () => {
 document.getElementById('btnGenerate').addEventListener('click', () => {
   const raw = arrInput.value.trim();
   if (!raw) { alert('Enter array elements separated by commas or spaces.'); return; }
-  // accept commas and/or spaces
   const parts = raw.split(/[, ]+/).map(s => s.trim()).filter(s => s.length);
   const nums = parts.map(Number).filter(n => !isNaN(n));
   if (!nums.length) { alert('No valid numbers found in input.'); return; }
-  // build tree from given array but insert in order; user earlier wanted sorted - use sorted array to build balanced-ish tree
-  nums.sort((a,b)=>a-b);
   root = null;
   nums.forEach(n => insertValue(n));
   arrInput.value = '';
@@ -322,17 +297,14 @@ document.getElementById('btnClear').addEventListener('click', () => {
   arrInput.value = '';
 });
 
-/* ---------- Highlight found node (simple method) ---------- */
+/* ---------- Highlight found node ---------- */
 function highlightNode(value) {
-  // Re-draw, then search svg elements for matching text, and add a glow circle around it
   drawTree();
-  // find text elements in svg with matching content
   const texts = svg.querySelectorAll('text');
   for (const t of texts) {
     if (t.textContent == String(value)) {
       const cx = parseFloat(t.getAttribute('x'));
       const cy = parseFloat(t.getAttribute('y')) - 6;
-      // create highlight ring
       const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
       ring.setAttribute('cx', cx);
       ring.setAttribute('cy', cy);
@@ -342,16 +314,15 @@ function highlightNode(value) {
       ring.setAttribute('stroke-width', '3.5');
       ring.setAttribute('opacity', '0.95');
       svg.appendChild(ring);
-      // small animation: fade out after 1.2s
       setTimeout(() => { ring.remove(); }, 1400);
       break;
     }
   }
 }
 
-/* initial render (empty) */
+/* initial render */
 drawTree();
-
 </script>
 </body>
 </html>
+
